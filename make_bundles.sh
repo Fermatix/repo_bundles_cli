@@ -27,6 +27,7 @@ if [ -z "$URLS_FILE" ] || [ ! -r "$URLS_FILE" ]; then
 fi
 
 mkdir -p "$OUT_DIR"
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"   # абсолютный путь: bundle создаётся из каталога клона
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -57,10 +58,9 @@ while IFS= read -r url || [ -n "$url" ]; do
   echo "==> [$total] $url"
   echo "    -> $bundle"
 
-  abs_bundle="$(readlink -f "$bundle" 2>/dev/null || echo "$bundle")"
   if git clone --mirror --quiet "$url" "$mirror" \
-     && git -C "$mirror" bundle create "$abs_bundle" --all \
-     && git -C "$mirror" bundle verify "$abs_bundle" >/dev/null 2>&1; then
+     && git -C "$mirror" bundle create "$bundle" --all \
+     && git -C "$mirror" bundle verify "$bundle" >/dev/null 2>&1; then
     echo "    OK ($(du -h "$bundle" | cut -f1))"
     ok=$((ok+1))
   else
