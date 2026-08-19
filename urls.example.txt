@@ -1,0 +1,3 @@
+# Пример списка репозиториев, по одному URL на строку
+https://gitlab.com/your-org/backend.git
+git@github.com:your-org/web.git
