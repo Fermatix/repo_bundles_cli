@@ -6,6 +6,11 @@
 # файл и проверяется. Git -> <namespace>.bundle (git bundle create --all),
 # Mercurial -> <namespace>.hgbundle (hg bundle --all).
 #
+# Для git дополнительно забираются рефы ревью: refs/merge-requests/* (GitLab) и
+# refs/pull/* (GitHub). Сервер их не анонсирует, поэтому --mirror сам по себе их
+# не тянет — и коммиты незамерженных MR/PR в bundle не попадают.
+# Отключить: HIDDEN_REFS=0 ./make_bundles.sh repos.txt
+#
 # Использование:
 #   ./make_bundles.sh repos.txt [output_dir]
 #   ./make_bundles.sh <(echo https://gitlab.com/org/repo.git)
@@ -27,6 +32,7 @@ set -euo pipefail
 
 URLS_FILE="${1:-}"
 OUT_DIR="${2:-./bundles}"
+HIDDEN_REFS="${HIDDEN_REFS:-1}"   # забирать ли refs/merge-requests/* и refs/pull/*
 
 if [ -z "$URLS_FILE" ] || [ ! -r "$URLS_FILE" ]; then
   echo "Использование: $0 <файл-со-списком-url> [каталог-вывода]" >&2
@@ -82,6 +88,18 @@ bundle_name() {
   echo "$path" | tr '/' '_'
 }
 
+# Дотянуть рефы ревью в готовое зеркало и напечатать, сколько их набралось.
+# Пространства имён нет — не ошибка: fetch просто вернёт ненулевой код.
+fetch_hidden_refs() {
+  local mirror="$1" ns count=0 got
+  for ns in merge-requests pull; do
+    git -C "$mirror" fetch --quiet --force origin "+refs/$ns/*:refs/$ns/*" 2>/dev/null || continue
+    got="$(git -C "$mirror" for-each-ref --format='.' "refs/$ns" | wc -l | tr -d ' ')"
+    count=$((count + got))
+  done
+  echo "$count"
+}
+
 HG_MISSING_WARNED=0
 ok=0; fail=0; total=0
 while IFS= read -r url || [ -n "$url" ]; do
@@ -125,10 +143,19 @@ while IFS= read -r url || [ -n "$url" ]; do
       fail=$((fail+1))
     fi
   else
-    if git clone --mirror --quiet "$bare" "$mirror" \
+    hidden=0; cloned=0
+    if git clone --mirror --quiet "$bare" "$mirror"; then
+      cloned=1
+      if [ "$HIDDEN_REFS" != 0 ]; then
+        hidden="$(fetch_hidden_refs "$mirror")"
+      fi
+    fi
+    if [ "$cloned" -eq 1 ] \
        && git -C "$mirror" bundle create "$bundle" --all \
        && git -C "$mirror" bundle verify "$bundle" >/dev/null 2>&1; then
-      echo "    OK ($(du -h "$bundle" | cut -f1))"
+      note=""
+      [ "$hidden" -gt 0 ] && note=", рефов ревью: $hidden"
+      echo "    OK ($(du -h "$bundle" | cut -f1)$note)"
       ok=$((ok+1))
     else
       echo "    ОШИБКА — пропущено" >&2
