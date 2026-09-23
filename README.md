@@ -1,111 +1,211 @@
-# repo_bundles_cli — выгрузка репозиториев в bundle
+# Repository Bundles CLI
 
-Утилита для выгрузки git- и mercurial-репозиториев в файлы bundle. Bundle — самодостаточный
-архив, в который попадает вся история, все ветки, все теги, а для git — ещё и рефы
-ревью: `refs/merge-requests/*` (GitLab) и `refs/pull/*` (GitHub). На каждый репозиторий
-получается один файл, который удобно передавать.
+Export Git and Mercurial repositories into portable bundle files, one per
+repository. Each bundle contains the history, branches and tags available to the
+clone. Git exports also attempt to include pull request and merge request refs.
 
-## Использование
+## Required: Quickstart
 
-1. Сделайте скрипт исполняемым:
+Follow these four steps to create and collect your bundles. Everything after the
+**Optional reference** divider covers alternative inputs and advanced usage.
 
-   ```bash
-   chmod +x make_bundles.sh
-   ```
+### 1. Install dependencies
 
-2. Создайте файл `repos.txt` — по одному URL репозитория на строку. Пустые строки
-   и строки, начинающиеся с `#`, игнорируются:
+Use macOS or Linux with Bash, Git and an SSH client.
 
-   ```
-   https://gitlab.com/your-org/backend.git
-   https://gitlab.com/your-org/mobile-app.git
-   git@github.com:your-org/web.git
-   https://foss.heptapod.net/your-group/legacy
-   hg+https://hg.example.org/old-project
-   ```
-
-   Поддерживаются https- и ssh-ссылки. Нужен доступ к репозиториям: при
-   необходимости скрипт запросит логин/пароль или использует ваш ssh-ключ.
-
-3. Запустите:
-
-   ```bash
-   ./make_bundles.sh repos.txt ./bundles
-   ```
-
-   Готовые файлы появятся в каталоге `./bundles` с именами по namespace
-   репозитория:
-
-   ```
-   bundles/your-org__backend.bundle
-   bundles/your-org__mobile-app.bundle
-   bundles/your-group__legacy.hgbundle
-   ```
-
-## Git и Mercurial
-
-Система контроля версий определяется автоматически по ссылке, как в `repo_metadata_cli`:
-
-- префикс схемы `hg+<url>` или `git+<url>` — явное указание, приоритетнее автоопределения;
-- суффикс `.git` — git;
-- известные hg-хосты (`hg.mozilla.org`, `*.heptapod.net`, `mercurial-scm.org` и т.п.) — mercurial;
-- всё остальное (GitHub, GitLab и пр.) — git.
-
-Git-бандлы сохраняются как `*.bundle`, mercurial-бандлы — как `*.hgbundle`.
-
-Для mercurial нужна команда `hg`:
+**macOS**, with [Homebrew](https://brew.sh/) installed:
 
 ```bash
-pip install mercurial
+brew install git
 ```
 
-Без `hg` mercurial-репозитории пропускаются с ошибкой, git-репозитории выгружаются как обычно.
+Bash and the SSH client are included with macOS.
 
-## Что делает скрипт
-
-Для каждого URL:
-
-- git: `git clone --mirror` → дотягивает рефы ревью → `git bundle create --all` →
-  `git bundle verify`;
-- mercurial: `hg clone -U` → `hg bundle --all` → `hg debugbundle`;
-- удаляет временный клон.
-
-### Рефы ревью
-
-`git clone --mirror` забирает только то, что сервер анонсирует: ветки, теги, notes.
-Ветки merge request'ов и pull request'ов туда не попадают — GitLab и GitHub держат их
-в скрытых пространствах имён. А это значит, что коммиты незамерженных или удалённых
-после мержа веток в bundle не попадут: история будет короче, чем в исходном
-репозитории.
-
-Поэтому после клонирования скрипт отдельно дотягивает их явными refspec'ами:
-
-```
-+refs/merge-requests/*:refs/merge-requests/*   # GitLab
-+refs/pull/*:refs/pull/*                       # GitHub
-```
-
-Нет такого пространства имён — не ошибка, репозиторий выгружается как обычно. Сколько
-рефов ревью попало в bundle, видно в строке результата: `OK (12M, рефов ревью: 37)`.
-
-Выключить (например, если MR-рефов тысячи и bundle раздувается):
+**Ubuntu / Debian**:
 
 ```bash
-HIDDEN_REFS=0 ./make_bundles.sh repos.txt
+sudo apt-get update
+sudo apt-get install -y bash git openssh-client ca-certificates
 ```
 
-Оговорка на будущее: клон из готового bundle подтягивает только `refs/heads` и теги,
-поэтому `git rev-list --all` в таком клоне рефы ревью не увидит — до них нужно
-дотягиваться из bundle тем же явным refspec'ом.
+<details>
+<summary>Optional dependency: Mercurial</summary>
 
-В конце печатает сводку и завершается с ненулевым кодом, если хотя бы один
-репозиторий не удалось выгрузить.
+Install this only if your list includes Mercurial repositories:
 
-## Аргументы
+**macOS**:
 
-```
-./make_bundles.sh <файл-со-списком-url> [каталог-вывода]
+```bash
+brew install mercurial
 ```
 
-- `<файл-со-списком-url>` — обязательный; по одному URL на строку.
-- `[каталог-вывода]` — необязательный, по умолчанию `./bundles`.
+**Ubuntu / Debian**:
+
+```bash
+sudo apt-get install -y mercurial
+```
+
+</details>
+
+**Then, on either platform**:
+
+```bash
+git clone https://github.com/Fermatix/repo_bundles_cli.git
+cd repo_bundles_cli
+chmod +x make_bundles.sh
+```
+
+Run subsequent commands from this directory.
+
+### 2. Prepare the repository list
+
+Create `repos.txt` with one Git SSH URL per line. This Quickstart assumes your SSH
+key is configured and has read access to the repositories:
+
+```text
+# Blank lines and lines starting with # are ignored
+
+git@git.example.com:group/service-api.git
+git@git.example.com:group/mobile-app.git
+```
+
+Replace the examples with your repositories. Leading and trailing whitespace is
+trimmed; both Unix and Windows line endings are accepted.
+
+### 3. Create bundles
+
+```bash
+./make_bundles.sh repos.txt ./bundles
+```
+
+For each repository, the script creates a temporary mirror, fetches available
+review refs, creates and verifies a bundle, then removes the temporary clone.
+The source repository is not changed.
+
+### 4. Collect the results
+
+The files to share are in **`./bundles`**. The example list produces:
+
+```text
+bundles/group_service-api.bundle
+bundles/group_mobile-app.bundle
+```
+
+Check the final summary: the successful count should match the number of
+repositories in your list, with no errors. Exit status `0` means all listed
+repositories were exported; a nonzero status indicates an error. Progress and
+summary messages are currently in Russian.
+
+If a repository fails, successful bundles remain in the output directory. Fix
+access or dependencies and rerun a list containing the failed repositories.
+
+---
+
+## Optional reference
+
+The export workflow above is complete. Read below only for other input types,
+output settings or restoring a bundle.
+
+### HTTPS access
+
+HTTPS URLs are an alternative in `repos.txt`:
+
+```text
+https://github.com/example-org/mobile-app.git
+
+# Without an SSH key, include your username and token in the HTTPS URL
+https://username:TOKEN@git.example.com/group/legacy-service.git
+```
+
+For private repositories, configure a Git credential helper or use credentials
+in the URL. The script disables Git's interactive username/password prompts.
+
+### Local repositories
+
+Local Git repositories can also be listed:
+
+```text
+/home/user/repos/internal-tool
+```
+
+Use absolute paths.
+
+### Mercurial
+
+Install the optional `hg` dependency from step 1, then prefix Mercurial entries
+with `hg+`:
+
+```text
+hg+https://hg.example.org/old-project
+hg+/home/user/repos/legacy-billing
+```
+
+The script uses `hg clone -U`, `hg bundle --all` and `hg debugbundle`, producing
+`.hgbundle` files. Without `hg`, Mercurial entries fail while Git entries are
+still processed. Empty repositories cannot produce a bundle.
+
+Explicit `hg+` and `git+` prefixes override detection. Otherwise, a `.git` suffix
+selects Git; hosts matching `hg.*`, `*heptapod*` or `mercurial-scm.org` (including
+its subdomains) select Mercurial. Other inputs default to Git.
+
+### Output settings
+
+```text
+./make_bundles.sh <repository-list> [output-directory]
+```
+
+The list is required. The output directory defaults to `./bundles` and is created
+if needed. Repository path separators become single underscores:
+`group/service-api.git` becomes `group_service-api.bundle`.
+
+Hostnames are omitted from filenames. Use separate output directories for
+repositories whose names would collide. Each run clones the listed repositories
+again and replaces matching output files; it does not resume earlier work.
+
+### Review refs
+
+By default, after `git clone --mirror`, the script attempts to fetch these
+additional namespaces:
+
+```text
++refs/merge-requests/*:refs/merge-requests/*
++refs/pull/*:refs/pull/*
+```
+
+These can retain commits from PR/MR branches that are no longer ordinary branches.
+The server must make the refs available to your account. Fetch failures for these
+namespaces do not fail the export, so an `OK` result does not guarantee their
+presence. The progress line reports the review ref count when it is nonzero.
+
+To skip the additional fetches:
+
+```bash
+HIDDEN_REFS=0 ./make_bundles.sh repos.txt ./bundles
+```
+
+### Restore a bundle
+
+To inspect the refs saved in a Git bundle:
+
+```bash
+git bundle list-heads bundles/group_service-api.bundle
+```
+
+For a working copy:
+
+```bash
+git clone bundles/group_service-api.bundle restored-service-api
+```
+
+A normal clone does not import the review namespaces. To import all bundled refs
+into a bare mirror instead:
+
+```bash
+git clone --mirror bundles/group_service-api.bundle restored-service-api.git
+```
+
+For Mercurial:
+
+```bash
+hg clone bundles/old-project.hgbundle restored-old-project
+```
