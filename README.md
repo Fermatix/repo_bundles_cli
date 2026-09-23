@@ -4,12 +4,7 @@ Export Git and Mercurial repositories into portable bundle files, one per
 repository. Each bundle contains the history, branches and tags available to the
 clone. Git exports also attempt to include pull request and merge request refs.
 
-## Required: Quickstart
-
-Follow these four steps to create and collect your bundles. Everything after the
-**Optional reference** divider covers alternative inputs and advanced usage.
-
-### 1. Install dependencies
+## Installation
 
 Use macOS or Linux with Bash, Git and an SSH client.
 
@@ -28,36 +23,16 @@ sudo apt-get update
 sudo apt-get install -y bash git openssh-client ca-certificates
 ```
 
-<details>
-<summary>Optional dependency: Mercurial</summary>
-
-Install this only if your list includes Mercurial repositories:
-
-**macOS**:
-
-```bash
-brew install mercurial
-```
-
-**Ubuntu / Debian**:
-
-```bash
-sudo apt-get install -y mercurial
-```
-
-</details>
-
 **Then, on either platform**:
 
 ```bash
 git clone https://github.com/Fermatix/repo_bundles_cli.git
 cd repo_bundles_cli
-chmod +x make_bundles.sh
 ```
 
 Run subsequent commands from this directory.
 
-### 2. Prepare the repository list
+## Quickstart
 
 Create `repos.txt` with one Git SSH URL per line. This Quickstart assumes your SSH
 key is configured and has read access to the repositories:
@@ -69,42 +44,24 @@ git@git.example.com:group/service-api.git
 git@git.example.com:group/mobile-app.git
 ```
 
-Replace the examples with your repositories. Leading and trailing whitespace is
-trimmed; both Unix and Windows line endings are accepted.
-
-### 3. Create bundles
-
 ```bash
-./make_bundles.sh repos.txt ./bundles
+./make_bundles.sh repos.txt
 ```
 
-For each repository, the script creates a temporary mirror, fetches available
-review refs, creates and verifies a bundle, then removes the temporary clone.
-The source repository is not changed.
-
-### 4. Collect the results
-
-The files to share are in **`./bundles`**. The example list produces:
+The bundles are in **`./bundles`**. The example list produces:
 
 ```text
 bundles/group_service-api.bundle
 bundles/group_mobile-app.bundle
 ```
 
-Check the final summary: the successful count should match the number of
-repositories in your list, with no errors. Exit status `0` means all listed
-repositories were exported; a nonzero status indicates an error. Progress and
-summary messages are currently in Russian.
-
-If a repository fails, successful bundles remain in the output directory. Fix
-access or dependencies and rerun a list containing the failed repositories.
+Check the final summary: the successful count should match your list, with no
+errors. Exit status `0` means all listed repositories were exported. Successful
+bundles remain available if another repository fails.
 
 ---
 
 ## Optional reference
-
-The export workflow above is complete. Read below only for other input types,
-output settings or restoring a bundle.
 
 ### HTTPS access
 
@@ -132,8 +89,21 @@ Use absolute paths.
 
 ### Mercurial
 
-Install the optional `hg` dependency from step 1, then prefix Mercurial entries
-with `hg+`:
+Install Mercurial only if needed:
+
+**macOS**:
+
+```bash
+brew install mercurial
+```
+
+**Ubuntu / Debian**:
+
+```bash
+sudo apt-get install -y mercurial
+```
+
+Prefix Mercurial entries with `hg+`:
 
 ```text
 hg+https://hg.example.org/old-project
@@ -157,6 +127,10 @@ its subdomains) select Mercurial. Other inputs default to Git.
 The list is required. The output directory defaults to `./bundles` and is created
 if needed. Repository path separators become single underscores:
 `group/service-api.git` becomes `group_service-api.bundle`.
+
+Leading and trailing whitespace is trimmed; Unix and Windows line endings are
+accepted. Progress and summary messages are currently in Russian. If a repository
+fails, fix access or dependencies and rerun a list containing the failed sources.
 
 Hostnames are omitted from filenames. Use separate output directories for
 repositories whose names would collide. Each run clones the listed repositories
